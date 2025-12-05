@@ -18,11 +18,33 @@ class _AnalysisPageState extends State<AnalysisPage> {
   HealthType _selectedType = HealthType.heartRate;
   List<HealthData> _healthHistory = [];
   bool _isLoading = false;
+  Map<String, dynamic>? _currentSummary; // holds latest metrics summary or array
 
   @override
   void initState() {
     super.initState();
-    _loadHealthHistory();
+    _loadAll();
+  }
+
+  Future<void> _loadAll() async {
+    await _loadCurrentSummary();
+    await _loadHealthHistory();
+  }
+
+  Future<void> _loadCurrentSummary() async {
+    try {
+      final token = await _authService.getToken();
+      if (token != null) {
+        final result = await _apiService.getCurrentHealthData(token);
+        if (result['success'] == true && mounted) {
+          setState(() {
+            _currentSummary = result['data'] as Map<String, dynamic>;
+          });
+        }
+      }
+    } catch (_) {
+      // ignore errors for summary
+    }
   }
 
   Future<void> _loadHealthHistory() async {
@@ -75,6 +97,16 @@ class _AnalysisPageState extends State<AnalysisPage> {
       ),
       body: Column(
         children: [
+          // Current Summary Cards
+          if (_currentSummary != null)
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: _buildSummaryCards(context),
+              ),
+            ),
           // Filter Chips
           Container(
             padding: const EdgeInsets.all(16.0),
@@ -148,6 +180,14 @@ class _AnalysisPageState extends State<AnalysisPage> {
                         child: ListView(
                           padding: const EdgeInsets.all(16.0),
                           children: [
+                            if (_currentSummary == null)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 16.0),
+                                child: Text(
+                                  'No summary available yet',
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                              ),
                             // Graph placeholder
                             Card(
                               child: Container(
@@ -249,6 +289,66 @@ class _AnalysisPageState extends State<AnalysisPage> {
     } else {
       return '${date.day}/${date.month}/${date.year}';
     }
+  }
+
+  List<Widget> _buildSummaryCards(BuildContext context) {
+    final cards = <Widget>[];
+    final summary = _currentSummary!;
+    // If backend returned compact keys
+    void addCard(String title, String key, String unit, String icon) {
+      final value = summary[key];
+      if (value != null) {
+        cards.add(_metricCard(context, title, value.toString(), unit, icon));
+      }
+    }
+    addCard('Heart Rate', 'heartRate', 'bpm', '❤️');
+    addCard('Blood Pressure', 'bloodPressure', 'mmHg', '🩺');
+    addCard('Temperature', 'temperature', '°C', '🌡️');
+    addCard('Blood Sugar', 'bloodSugar', 'mg/dL', '🍬');
+
+    // Or if backend returned array under data
+    if (summary['data'] is List && (summary['data'] as List).isNotEmpty) {
+      for (final item in (summary['data'] as List)) {
+        final type = (item['type'] ?? '').toString();
+        final value = item['value']?.toString();
+        final unit = item['unit']?.toString() ?? '';
+        if (value == null) continue;
+        switch (type) {
+          case 'heartRate':
+            cards.add(_metricCard(context, 'Heart Rate', value, unit, '❤️'));
+            break;
+          case 'bloodPressure':
+            cards.add(_metricCard(context, 'Blood Pressure', value, unit, '🩺'));
+            break;
+          case 'temperature':
+            cards.add(_metricCard(context, 'Temperature', value, unit, '🌡️'));
+            break;
+          case 'bloodSugar':
+            cards.add(_metricCard(context, 'Blood Sugar', value, unit, '🍬'));
+            break;
+        }
+      }
+    }
+    return cards;
+  }
+
+  Widget _metricCard(BuildContext context, String title, String value, String unit, String icon) {
+    return Card(
+      child: Container(
+        width: 160,
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(icon, style: const TextStyle(fontSize: 20)),
+            const SizedBox(height: 8),
+            Text(title, style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: 8),
+            Text('$value $unit', style: Theme.of(context).textTheme.displaySmall),
+          ],
+        ),
+      ),
+    );
   }
 }
 

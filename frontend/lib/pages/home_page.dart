@@ -64,6 +64,12 @@ class _HomePageState extends State<HomePage> {
         title: const Text('Home'),
         backgroundColor: AppTheme.calmBlue,
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _saveThreeMetrics,
+        icon: const Icon(Icons.save),
+        label: const Text('Save'),
+        backgroundColor: AppTheme.calmBlue,
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -310,6 +316,62 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
     );
+  }
+
+  Future<void> _saveThreeMetrics() async {
+    final token = await _authService.getToken();
+    if (token == null || token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please login first')),
+      );
+      return;
+    }
+
+    final now = DateTime.now();
+    final results = <Map<String, dynamic>>[];
+
+    results.add(await _apiService.submitHealthData(
+      token,
+      type: HealthType.heartRate,
+      value: _healthData[HealthType.heartRate] ?? 72.0,
+      unit: HealthType.heartRate.unit,
+      timestamp: now,
+      additionalData: { 'source': 'HomePageSave' },
+    ));
+
+    results.add(await _apiService.submitHealthData(
+      token,
+      type: HealthType.bloodPressure,
+      value: _healthData[HealthType.bloodPressure] ?? 120.0,
+      unit: HealthType.bloodPressure.unit,
+      timestamp: now,
+      additionalData: { 'source': 'HomePageSave' },
+    ));
+
+    results.add(await _apiService.submitHealthData(
+      token,
+      type: HealthType.temperature,
+      value: _healthData[HealthType.temperature] ?? 36.6,
+      unit: HealthType.temperature.unit,
+      timestamp: now,
+      additionalData: { 'source': 'HomePageSave' },
+    ));
+
+    final allOk = results.every((r) => r['success'] == true);
+    if (allOk) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Saved heart rate, blood pressure, and temperature')),
+      );
+      _loadHealthData();
+    } else {
+      final firstErr = results.firstWhere(
+        (r) => r['success'] != true,
+        orElse: () => {'message': 'Failed to save some data'},
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(firstErr['message'] ?? 'Failed to save some data')),
+      );
+    }
   }
 }
 

@@ -1,14 +1,29 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/user_model.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import '../models/health_data_model.dart';
 
 class ApiService {
-  // Point this to your running backend. For local dev:
-  // Android emulator: use http://10.0.2.2:4000/api
-  // iOS simulator: use http://localhost:4000/api
-  // Desktop/Web: use http://localhost:4000/api
-  static const String baseUrl = 'http://localhost:4000/api';
+  // Dynamically select base URL based on platform for local development.
+  static String get baseUrl {
+    if (kIsWeb) {
+      // Chrome debug runs in the browser; call the local Node backend
+      return 'http://localhost:4000/api';
+    }
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        // Android emulator special loopback
+        return 'http://10.0.2.2:4000/api';
+      case TargetPlatform.iOS:
+      case TargetPlatform.macOS:
+      case TargetPlatform.windows:
+      case TargetPlatform.linux:
+        return 'http://localhost:4000/api';
+      case TargetPlatform.fuchsia:
+        return 'http://localhost:4000/api';
+    }
+  }
 
   // Headers
   Map<String, String> getHeaders({String? token}) {

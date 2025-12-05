@@ -4,7 +4,7 @@ import pool from './pool.js';
 import { initHealthSchema } from '../services/health.service.js';
 
 async function migrate() {
-  const sqlPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), 'migrate.sql');
+  const sqlPath = path.join(process.cwd(), 'src', 'db', 'migrate.sql');
   const sql = fs.readFileSync(sqlPath, 'utf8');
   const client = await pool.connect();
   try {

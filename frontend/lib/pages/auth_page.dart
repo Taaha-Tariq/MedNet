@@ -301,16 +301,7 @@ class _AuthPageState extends State<AuthPage>
           ),
           const SizedBox(height: 32),
           ElevatedButton(
-            onPressed: _isLoading
-                ? null
-                : () {
-                    // Temporarily navigate directly for testing
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => const MainScreen()),
-                    );
-                    // Original login logic (commented for now)
-                    // _handleLogin();
-                  },
+            onPressed: _isLoading ? null : _handleLogin,
             child: _isLoading
                 ? const SizedBox(
                     height: 20,
@@ -419,16 +410,7 @@ class _AuthPageState extends State<AuthPage>
           ),
           const SizedBox(height: 32),
           ElevatedButton(
-            onPressed: _isLoading
-                ? null
-                : () {
-                    // Temporarily navigate directly for testing
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => const MainScreen()),
-                    );
-                    // Original signup logic (commented for now)
-                    // _handleSignUp();
-                  },
+            onPressed: _isLoading ? null : _handleSignUp,
             child: _isLoading
                 ? const SizedBox(
                     height: 20,

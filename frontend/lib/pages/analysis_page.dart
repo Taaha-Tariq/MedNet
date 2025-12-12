@@ -17,6 +17,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
 
   HealthType _selectedType = HealthType.heartRate;
   List<HealthData> _healthHistory = [];
+  Map<HealthType, List<HealthData>> _allHistoryByType = {};
   bool _isLoading = false;
   Map<String, dynamic>? _currentSummary; // holds latest metrics summary or array
 
@@ -52,10 +53,8 @@ class _AnalysisPageState extends State<AnalysisPage> {
     try {
       final token = await _authService.getToken();
       if (token != null) {
-        final result = await _apiService.getHealthHistory(
-          token,
-          type: _selectedType,
-        );
+        // Fetch selected type history
+        final result = await _apiService.getHealthHistory(token, type: _selectedType);
 
         if (result['success'] == true && mounted) {
           final data = result['data'];
@@ -72,6 +71,32 @@ class _AnalysisPageState extends State<AnalysisPage> {
                   .toList();
             });
           }
+        }
+
+        // Also fetch full history across all types to display comprehensive past data
+        final allRes = await _apiService.getHealthHistory(token);
+        if (allRes['success'] == true && mounted) {
+          final data = allRes['data'];
+          List<dynamic> list;
+          if (data is List) {
+            list = data;
+          } else if (data is Map && data['data'] is List) {
+            list = data['data'] as List<dynamic>;
+          } else {
+            list = [];
+          }
+          final grouped = <HealthType, List<HealthData>>{};
+          for (final item in list) {
+            final hd = HealthData.fromJson(item as Map<String, dynamic>);
+            grouped.putIfAbsent(hd.type, () => []).add(hd);
+          }
+          // Sort each list by timestamp desc
+          for (final t in grouped.keys) {
+            grouped[t]!.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+          }
+          setState(() {
+            _allHistoryByType = grouped;
+          });
         }
       }
     } catch (e) {
@@ -94,58 +119,35 @@ class _AnalysisPageState extends State<AnalysisPage> {
       appBar: AppBar(
         title: const Text('Health Analysis'),
         backgroundColor: AppTheme.calmBlue,
+        actions: [
+          IconButton(
+            tooltip: 'Refresh',
+            icon: const Icon(Icons.refresh),
+            onPressed: () async {
+              await _loadAll();
+            },
+          ),
+        ],
       ),
       body: Column(
         children: [
-          // Current Summary Cards
+          // Summary section
           if (_currentSummary != null)
             Padding(
               padding: const EdgeInsets.all(16.0),
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: _buildSummaryCards(context),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Current Summary', style: Theme.of(context).textTheme.displaySmall),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: _buildSummaryCards(context),
+                  ),
+                ],
               ),
             ),
-          // Filter Chips
-          Container(
-            padding: const EdgeInsets.all(16.0),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: HealthType.values.map((type) {
-                  final isSelected = _selectedType == type;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8.0),
-                    child: FilterChip(
-                      selected: isSelected,
-                      label: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(type.icon),
-                          const SizedBox(width: 4),
-                          Text(type.displayName),
-                        ],
-                      ),
-                      onSelected: (selected) {
-                        if (selected) {
-                          setState(() {
-                            _selectedType = type;
-                          });
-                          _loadHealthHistory();
-                        }
-                      },
-                      selectedColor: AppTheme.calmBlue,
-                      checkmarkColor: Colors.white,
-                      labelStyle: TextStyle(
-                        color: isSelected ? Colors.white : AppTheme.coolGraphite,
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-          ),
           // Content
           Expanded(
             child: _isLoading
@@ -180,14 +182,6 @@ class _AnalysisPageState extends State<AnalysisPage> {
                         child: ListView(
                           padding: const EdgeInsets.all(16.0),
                           children: [
-                            if (_currentSummary == null)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 16.0),
-                                child: Text(
-                                  'No summary available yet',
-                                  style: Theme.of(context).textTheme.bodyMedium,
-                                ),
-                              ),
                             // Graph placeholder
                             Card(
                               child: Container(
@@ -198,19 +192,14 @@ class _AnalysisPageState extends State<AnalysisPage> {
                                   children: [
                                     Text(
                                       '${_selectedType.displayName} Trends',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .displaySmall,
+                                      style: Theme.of(context).textTheme.displaySmall,
                                     ),
                                     const SizedBox(height: 16),
                                     Expanded(
                                       child: Center(
                                         child: Text(
                                           '📈 Graph will be displayed here',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodyLarge
-                                              ?.copyWith(
+                                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                                                 color: AppTheme.coolGraphite,
                                               ),
                                         ),
@@ -221,46 +210,43 @@ class _AnalysisPageState extends State<AnalysisPage> {
                               ),
                             ),
                             const SizedBox(height: 16),
-                            Text(
-                              'Recent Records',
-                              style: Theme.of(context).textTheme.displaySmall,
+                            // Selected type recent records
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('Recent Records', style: Theme.of(context).textTheme.displaySmall),
+                                DropdownButton<HealthType>(
+                                  value: _selectedType,
+                                  onChanged: (val) async {
+                                    if (val == null) return;
+                                    setState(() => _selectedType = val);
+                                    await _loadHealthHistory();
+                                  },
+                                  items: HealthType.values
+                                      .map((t) => DropdownMenuItem(
+                                            value: t,
+                                            child: Text(t.displayName),
+                                          ))
+                                      .toList(),
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 12),
-                            // History List
-                            ..._healthHistory.take(10).map((data) => Card(
-                                  margin: const EdgeInsets.only(bottom: 12),
-                                  child: ListTile(
-                                    leading: Container(
-                                      width: 50,
-                                      height: 50,
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.calmBlue.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Center(
-                                        child: Text(
-                                          _selectedType.icon,
-                                          style: const TextStyle(fontSize: 24),
-                                        ),
-                                      ),
-                                    ),
-                                    title: Text(
-                                      '${data.value.toStringAsFixed(_selectedType == HealthType.temperature ? 1 : 0)} ${data.unit}',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .displaySmall,
-                                    ),
-                                    subtitle: Text(
-                                      _formatDate(data.timestamp),
-                                      style: Theme.of(context).textTheme.bodySmall,
-                                    ),
-                                    trailing: Icon(
-                                      Icons.arrow_forward_ios,
-                                      size: 16,
-                                      color: AppTheme.coolGraphite,
-                                    ),
-                                  ),
-                                )),
+                            ..._healthHistory.map((data) => _historyTile(context, data, _selectedType)),
+                            const SizedBox(height: 24),
+                            // All history grouped
+                            Text('All History', style: Theme.of(context).textTheme.displaySmall),
+                            const SizedBox(height: 12),
+                            ...HealthType.values.expand((t) {
+                              final list = _allHistoryByType[t] ?? [];
+                              if (list.isEmpty) return <Widget>[];
+                              return [
+                                Text(t.displayName, style: Theme.of(context).textTheme.bodyLarge),
+                                const SizedBox(height: 8),
+                                ...list.map((d) => _historyTile(context, d, t)),
+                                const SizedBox(height: 16),
+                              ];
+                            }).toList(),
                           ],
                         ),
                       ),
@@ -346,6 +332,41 @@ class _AnalysisPageState extends State<AnalysisPage> {
             const SizedBox(height: 8),
             Text('$value $unit', style: Theme.of(context).textTheme.displaySmall),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _historyTile(BuildContext context, HealthData data, HealthType type) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        leading: Container(
+          width: 50,
+          height: 50,
+          decoration: BoxDecoration(
+            color: AppTheme.calmBlue.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Center(
+            child: Text(
+              type.icon,
+              style: const TextStyle(fontSize: 24),
+            ),
+          ),
+        ),
+        title: Text(
+          '${data.value.toStringAsFixed(type == HealthType.temperature ? 1 : 0)} ${data.unit}',
+          style: Theme.of(context).textTheme.displaySmall,
+        ),
+        subtitle: Text(
+          _formatDate(data.timestamp),
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        trailing: Icon(
+          Icons.arrow_forward_ios,
+          size: 16,
+          color: AppTheme.coolGraphite,
         ),
       ),
     );

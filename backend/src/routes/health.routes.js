@@ -7,7 +7,6 @@ import { getCurrent, getByType, getHistory, submitHealth } from '../controllers/
 const router = Router();
 
 router.get('/current', auth, getCurrent);
-// Define history route before the dynamic :type route so it is not intercepted.
 router.get('/history', auth, validateQuery(historyQuerySchema), getHistory);
 router.get('/:type', auth, validateParams(typeParamSchema), validateQuery(paginationSchema), getByType);
 router.post('/submit', auth, validate(submitHealthSchema), submitHealth);

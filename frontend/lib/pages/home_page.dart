@@ -176,11 +176,20 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
             ),
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: () => _refreshHealthData(type),
-              color: AppTheme.calmBlue,
-            ),
+            Row(children: [
+              IconButton(
+                tooltip: 'Manual entry',
+                icon: const Icon(Icons.edit),
+                onPressed: () => _showManualEntryDialog(type),
+                color: AppTheme.calmBlue,
+              ),
+              IconButton(
+                tooltip: 'Refresh',
+                icon: const Icon(Icons.refresh),
+                onPressed: () => _refreshHealthData(type),
+                color: AppTheme.calmBlue,
+              ),
+            ]),
           ],
         ),
       ),
@@ -288,34 +297,8 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _handleCheckMetric(HealthType type) async {
-    // Show dialog or navigate to metric input screen
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Check ${type.displayName}'),
-        content: Text(
-          'This feature will connect to your health monitoring device or allow manual entry.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // Navigate to input screen or trigger device connection
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('${type.displayName} check initiated'),
-                ),
-              );
-            },
-            child: const Text('Continue'),
-          ),
-        ],
-      ),
-    );
+    // Directly open manual entry for now
+    _showManualEntryDialog(type);
   }
 
   Future<void> _saveThreeMetrics() async {
@@ -372,6 +355,105 @@ class _HomePageState extends State<HomePage> {
         SnackBar(content: Text(firstErr['message'] ?? 'Failed to save some data')),
       );
     }
+  }
+
+  Future<void> _showManualEntryDialog(HealthType type) async {
+    final token = await _authService.getToken();
+    if (token == null || token.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please login first')),
+        );
+      }
+      return;
+    }
+
+    final valueController = TextEditingController();
+    final diastolicController = TextEditingController(); // for BP optional
+    String? errorText;
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('Add ${type.displayName}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: valueController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: type == HealthType.bloodPressure ? 'Systolic (${type.unit})' : 'Value (${type.unit})',
+                  hintText: type == HealthType.temperature ? 'e.g., 36.7' : null,
+                  errorText: errorText,
+                ),
+              ),
+              if (type == HealthType.bloodPressure) ...[
+                const SizedBox(height: 8),
+                TextField(
+                  controller: diastolicController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Diastolic (mmHg)',
+                    hintText: 'e.g., 80',
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final txt = valueController.text.trim();
+                final val = double.tryParse(txt);
+                if (val == null) {
+                  setState(() => errorText = 'Enter a valid number');
+                  return;
+                }
+
+                Map<String, dynamic>? additional;
+                if (type == HealthType.bloodPressure) {
+                  final dTxt = diastolicController.text.trim();
+                  final dia = double.tryParse(dTxt);
+                  if (dia != null) {
+                    additional = {'diastolic': dia};
+                  }
+                }
+
+                final res = await _apiService.submitHealthData(
+                  token,
+                  type: type,
+                  value: val,
+                  unit: type.unit,
+                  timestamp: DateTime.now(),
+                  additionalData: additional,
+                );
+
+                if (res['success'] == true && mounted) {
+                  setState(() => errorText = null);
+                  Navigator.pop(context);
+                  // update local display
+                  this.setState(() {
+                    _healthData[type] = val;
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('${type.displayName} saved')),
+                  );
+                } else {
+                  setState(() => errorText = (res['message'] ?? 'Failed to save'));
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

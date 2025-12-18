@@ -3,6 +3,7 @@ import '../theme/app_theme.dart';
 import '../models/health_data_model.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
+import '../services/health_import_service.dart';
 
 class AnalysisPage extends StatefulWidget {
   const AnalysisPage({super.key});
@@ -14,6 +15,7 @@ class AnalysisPage extends StatefulWidget {
 class _AnalysisPageState extends State<AnalysisPage> {
   final ApiService _apiService = ApiService();
   final AuthService _authService = AuthService();
+  final HealthImportService _healthImport = HealthImportService();
 
   HealthType _selectedType = HealthType.heartRate;
   List<HealthData> _healthHistory = [];
@@ -110,6 +112,83 @@ class _AnalysisPageState extends State<AnalysisPage> {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  // Severity color coding based on typical ranges
+  Color _severityColor(HealthType type, double value) {
+    switch (type) {
+      case HealthType.heartRate:
+        // Normal ~60-100 bpm; danger <50 or >120
+        if (value < 50 || value > 120) return Colors.red;
+        if (value < 60 || value > 100) return Colors.orange;
+        return Colors.green;
+      case HealthType.bloodPressure:
+        // Assuming single mmHg value; normal ~90-140; danger <80 or >160
+        if (value < 80 || value > 160) return Colors.red;
+        if (value < 90 || value > 140) return Colors.orange;
+        return Colors.green;
+      case HealthType.temperature:
+        // Normal ~36.1-37.2 °C; danger <35 or >39
+        if (value < 35.0 || value > 39.0) return Colors.red;
+        if (value < 36.1 || value > 37.2) return Colors.orange;
+        return Colors.green;
+      case HealthType.bloodSugar:
+        // General normal ~70-140 mg/dL; danger <60 or >200
+        if (value < 60 || value > 200) return Colors.red;
+        if (value < 70 || value > 140) return Colors.orange;
+        return Colors.green;
+    }
+  }
+
+  void _showSummaryDialog() {
+    final list = _healthHistory;
+    if (list.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No records to summarize')),
+      );
+      return;
+    }
+    final values = list.map((e) => e.value).toList();
+    final mean = values.reduce((a, b) => a + b) / values.length;
+    final min = values.reduce((a, b) => a < b ? a : b);
+    final max = values.reduce((a, b) => a > b ? a : b);
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Summary • ${_selectedType.displayName}',
+                style: Theme.of(context).textTheme.displaySmall,
+              ),
+              const SizedBox(height: 12),
+              Text('Count: ${values.length}', style: Theme.of(context).textTheme.bodyLarge),
+              const SizedBox(height: 8),
+              Text('Mean: ${mean.toStringAsFixed(_selectedType == HealthType.temperature ? 2 : 1)} ${_selectedType.unit}',
+                  style: Theme.of(context).textTheme.bodyLarge),
+              const SizedBox(height: 8),
+              Text('Min: ${min.toStringAsFixed(_selectedType == HealthType.temperature ? 2 : 1)} ${_selectedType.unit}',
+                  style: Theme.of(context).textTheme.bodyLarge),
+              const SizedBox(height: 8),
+              Text('Max: ${max.toStringAsFixed(_selectedType == HealthType.temperature ? 2 : 1)} ${_selectedType.unit}',
+                  style: Theme.of(context).textTheme.bodyLarge),
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerRight,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Close'),
+                ),
+              )
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -215,19 +294,54 @@ class _AnalysisPageState extends State<AnalysisPage> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text('Recent Records', style: Theme.of(context).textTheme.displaySmall),
-                                DropdownButton<HealthType>(
-                                  value: _selectedType,
-                                  onChanged: (val) async {
-                                    if (val == null) return;
-                                    setState(() => _selectedType = val);
-                                    await _loadHealthHistory();
-                                  },
-                                  items: HealthType.values
-                                      .map((t) => DropdownMenuItem(
-                                            value: t,
-                                            child: Text(t.displayName),
-                                          ))
-                                      .toList(),
+                                Row(
+                                  children: [
+                                    ElevatedButton.icon(
+                                      onPressed: () async {
+                                        final token = await _authService.getToken();
+                                        if (token == null) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('Please login to import')),
+                                          );
+                                          return;
+                                        }
+                                        setState(() => _isLoading = true);
+                                        final count = await _healthImport.importAndSubmitSelectedType(
+                                          type: _selectedType,
+                                          token: token,
+                                          daysBack: 30,
+                                        );
+                                        await _loadHealthHistory();
+                                        setState(() => _isLoading = false);
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('Imported and saved $count records')),
+                                        );
+                                      },
+                                      icon: const Icon(Icons.download_outlined),
+                                      label: const Text('Import from Health'),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    ElevatedButton.icon(
+                                      onPressed: _showSummaryDialog,
+                                      icon: const Icon(Icons.analytics_outlined),
+                                      label: const Text('Summarize'),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    DropdownButton<HealthType>(
+                                      value: _selectedType,
+                                      onChanged: (val) async {
+                                        if (val == null) return;
+                                        setState(() => _selectedType = val);
+                                        await _loadHealthHistory();
+                                      },
+                                      items: HealthType.values
+                                          .map((t) => DropdownMenuItem(
+                                                value: t,
+                                                child: Text(t.displayName),
+                                              ))
+                                          .toList(),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -357,7 +471,10 @@ class _AnalysisPageState extends State<AnalysisPage> {
         ),
         title: Text(
           '${data.value.toStringAsFixed(type == HealthType.temperature ? 1 : 0)} ${data.unit}',
-          style: Theme.of(context).textTheme.displaySmall,
+          style: Theme.of(context)
+              .textTheme
+              .displaySmall
+              ?.copyWith(color: _severityColor(type, data.value)),
         ),
         subtitle: Text(
           _formatDate(data.timestamp),

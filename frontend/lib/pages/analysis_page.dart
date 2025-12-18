@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../theme/app_theme.dart';
 import '../models/health_data_model.dart';
 import '../services/api_service.dart';
@@ -231,8 +232,14 @@ class _AnalysisPageState extends State<AnalysisPage> {
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _healthHistory.isEmpty
-                    ? Center(
+                : (() {
+                    // Determine if there is any history at all across types
+                    final hasAnyHistory = _healthHistory.isNotEmpty ||
+                        _allHistoryByType.values
+                            .any((list) => list.isNotEmpty);
+
+                    if (!hasAnyHistory) {
+                      return Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -244,7 +251,10 @@ class _AnalysisPageState extends State<AnalysisPage> {
                             const SizedBox(height: 16),
                             Text(
                               'No health data available',
-                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyLarge
+                                  ?.copyWith(
                                     color: AppTheme.coolGraphite,
                                   ),
                             ),
@@ -255,13 +265,15 @@ class _AnalysisPageState extends State<AnalysisPage> {
                             ),
                           ],
                         ),
-                      )
-                    : RefreshIndicator(
+                      );
+                    }
+
+                    return RefreshIndicator(
                         onRefresh: _loadHealthHistory,
                         child: ListView(
                           padding: const EdgeInsets.all(16.0),
                           children: [
-                            // Graph placeholder
+                            // Graph of selected metric over time
                             Card(
                               child: Container(
                                 height: 200,
@@ -275,14 +287,123 @@ class _AnalysisPageState extends State<AnalysisPage> {
                                     ),
                                     const SizedBox(height: 16),
                                     Expanded(
-                                      child: Center(
-                                        child: Text(
-                                          '📈 Graph will be displayed here',
-                                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                                color: AppTheme.coolGraphite,
+                                      child: _healthHistory.length < 2
+                                          ? Center(
+                                              child: Text(
+                                                _healthHistory.isEmpty
+                                                    ? 'No data points yet to display a chart'
+                                                    : 'More than one reading is needed to draw a trend',
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodySmall
+                                                    ?.copyWith(
+                                                      color: AppTheme
+                                                          .coolGraphite,
+                                                    ),
                                               ),
-                                        ),
-                                      ),
+                                            )
+                                          : LineChart(
+                                              LineChartData(
+                                                minX: 0,
+                                                maxX: (_healthHistory.length -
+                                                        1)
+                                                    .toDouble(),
+                                                lineTouchData:
+                                                    LineTouchData(enabled: true),
+                                                gridData: FlGridData(show: true),
+                                                titlesData: FlTitlesData(
+                                                  bottomTitles: AxisTitles(
+                                                    sideTitles: SideTitles(
+                                                      showTitles: true,
+                                                      reservedSize: 22,
+                                                      getTitlesWidget:
+                                                          (value, meta) {
+                                                        final index =
+                                                            value.toInt();
+                                                        if (index < 0 ||
+                                                            index >=
+                                                                _healthHistory
+                                                                    .length) {
+                                                          return const SizedBox
+                                                              .shrink();
+                                                        }
+                                                        final ts =
+                                                            _healthHistory[
+                                                                    index]
+                                                                .timestamp;
+                                                        return Text(
+                                                          '${ts.day}/${ts.month}',
+                                                          style: Theme.of(
+                                                                  context)
+                                                              .textTheme
+                                                              .labelSmall,
+                                                        );
+                                                      },
+                                                    ),
+                                                  ),
+                                                  leftTitles: AxisTitles(
+                                                    sideTitles: SideTitles(
+                                                      showTitles: true,
+                                                      reservedSize: 32,
+                                                      getTitlesWidget:
+                                                          (value, meta) {
+                                                        return Text(
+                                                          value
+                                                              .toStringAsFixed(
+                                                                  _selectedType ==
+                                                                          HealthType
+                                                                              .temperature
+                                                                      ? 1
+                                                                      : 0),
+                                                          style: Theme.of(
+                                                                  context)
+                                                              .textTheme
+                                                              .labelSmall,
+                                                        );
+                                                      },
+                                                    ),
+                                                  ),
+                                                  topTitles: const AxisTitles(
+                                                    sideTitles: SideTitles(
+                                                        showTitles: false),
+                                                  ),
+                                                  rightTitles: const AxisTitles(
+                                                    sideTitles: SideTitles(
+                                                        showTitles: false),
+                                                  ),
+                                                ),
+                                                borderData: FlBorderData(
+                                                  show: true,
+                                                  border: Border.all(
+                                                    color:
+                                                        AppTheme.coolGraphite,
+                                                    width: 1,
+                                                  ),
+                                                ),
+                                                lineBarsData: [
+                                                  LineChartBarData(
+                                                    isCurved: true,
+                                                    color: AppTheme.calmBlue,
+                                                    barWidth: 3,
+                                                    dotData: FlDotData(
+                                                      show: true,
+                                                    ),
+                                                    spots: List.generate(
+                                                      _healthHistory.length,
+                                                      (index) {
+                                                        final hd =
+                                                            _healthHistory[
+                                                                index];
+                                                        return FlSpot(
+                                                          index.toDouble(),
+                                                          hd.value,
+                                                        );
+                                                      },
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
                                     ),
                                   ],
                                 ),
@@ -346,7 +467,15 @@ class _AnalysisPageState extends State<AnalysisPage> {
                               ],
                             ),
                             const SizedBox(height: 12),
-                            ..._healthHistory.map((data) => _historyTile(context, data, _selectedType)),
+                            if (_healthHistory.isEmpty)
+                              Text(
+                                'No records for ${_selectedType.displayName}. Try another metric from the dropdown.',
+                                style:
+                                    Theme.of(context).textTheme.bodySmall,
+                              )
+                            else
+                              ..._healthHistory.map((data) =>
+                                  _historyTile(context, data, _selectedType)),
                             const SizedBox(height: 24),
                             // All history grouped
                             Text('All History', style: Theme.of(context).textTheme.displaySmall),
@@ -363,7 +492,8 @@ class _AnalysisPageState extends State<AnalysisPage> {
                             }).toList(),
                           ],
                         ),
-                      ),
+                      );
+                  }()),
           ),
         ],
       ),

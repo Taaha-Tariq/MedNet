@@ -573,7 +573,15 @@ class _AnalysisPageState extends State<AnalysisPage> {
           ),
         ),
         title: Text(
-          '${data.value.toStringAsFixed(type == HealthType.temperature ? 1 : 0)} ${data.unit}',
+          () {
+            if (type == HealthType.bloodPressure) {
+              final sys = data.value.toStringAsFixed(0);
+              final diaVal = (data.additionalData?['diastolic'] as num?)?.toDouble();
+              final dia = diaVal != null ? diaVal.toStringAsFixed(0) : '—';
+              return '$sys/$dia ${data.unit}';
+            }
+            return '${data.value.toStringAsFixed(type == HealthType.temperature ? 1 : 0)} ${data.unit}';
+          }(),
           style: Theme.of(context)
               .textTheme
               .displaySmall

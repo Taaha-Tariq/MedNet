@@ -35,13 +35,13 @@ class _HomePageState extends State<HomePage> {
           // Parse health data from response
           // This will depend on your backend structure
           setState(() {
-            // Mock data for now - replace with actual data parsing
+            // Initial load: leave metrics unset (bars) until manual entry
             _healthData = {
-              HealthType.heartRate: 72.0,
-              HealthType.bloodPressure: 120.0, // Systolic
-              HealthType.temperature: 36.5,
+              HealthType.heartRate: null,
+              HealthType.bloodPressure: null,
+              HealthType.temperature: null,
             };
-            _bpDiastolic = 80.0; // mock diastolic
+            _bpDiastolic = null;
           });
         }
       }
@@ -95,19 +95,19 @@ class _HomePageState extends State<HomePage> {
                     _buildHealthCard(
                       context,
                       HealthType.heartRate,
-                      _healthData[HealthType.heartRate] ?? 0,
+                      _healthData[HealthType.heartRate],
                     ),
                     const SizedBox(height: 16),
                     _buildHealthCard(
                       context,
                       HealthType.bloodPressure,
-                      _healthData[HealthType.bloodPressure] ?? 0,
+                      _healthData[HealthType.bloodPressure],
                     ),
                     const SizedBox(height: 16),
                     _buildHealthCard(
                       context,
                       HealthType.temperature,
-                      _healthData[HealthType.temperature] ?? 0,
+                      _healthData[HealthType.temperature],
                     ),
                     const SizedBox(height: 24),
                     _buildActionButtons(context),
@@ -121,7 +121,7 @@ class _HomePageState extends State<HomePage> {
   Widget _buildHealthCard(
     BuildContext context,
     HealthType type,
-    double value,
+    double? value,
   ) {
     return Card(
       elevation: 2,
@@ -159,16 +159,18 @@ class _HomePageState extends State<HomePage> {
                       Text(
                         () {
                           if (type == HealthType.bloodPressure) {
-                            final sys = value > 0 ? value.toStringAsFixed(0) : '--';
-                            final dia = _bpDiastolic != null && _bpDiastolic! > 0
+                            final sys = (value != null && value > 0)
+                                ? value.toStringAsFixed(0)
+                                : '—';
+                            final dia = (_bpDiastolic != null && _bpDiastolic! > 0)
                                 ? _bpDiastolic!.toStringAsFixed(0)
-                                : '--';
+                                : '—';
                             return '$sys/$dia';
                           }
-                          return value > 0
+                          return (value != null && value > 0)
                               ? value.toStringAsFixed(
                                   type == HealthType.temperature ? 1 : 0)
-                              : '--';
+                              : '—';
                         }(),
                         style: Theme.of(context).textTheme.displayLarge?.copyWith(
                               color: AppTheme.calmBlue,
@@ -324,10 +326,21 @@ class _HomePageState extends State<HomePage> {
     final now = DateTime.now();
     final results = <Map<String, dynamic>>[];
 
+    // Require all metrics to be entered before saving
+    final hr = _healthData[HealthType.heartRate];
+    final bpSys = _healthData[HealthType.bloodPressure];
+    final temp = _healthData[HealthType.temperature];
+    if (hr == null || bpSys == null || temp == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter all metrics before saving')),
+      );
+      return;
+    }
+
     results.add(await _apiService.submitHealthData(
       token,
       type: HealthType.heartRate,
-      value: _healthData[HealthType.heartRate] ?? 72.0,
+      value: hr,
       unit: HealthType.heartRate.unit,
       timestamp: now,
       additionalData: { 'source': 'HomePageSave' },
@@ -336,7 +349,7 @@ class _HomePageState extends State<HomePage> {
     results.add(await _apiService.submitHealthData(
       token,
       type: HealthType.bloodPressure,
-      value: _healthData[HealthType.bloodPressure] ?? 120.0,
+      value: bpSys,
       unit: HealthType.bloodPressure.unit,
       timestamp: now,
       additionalData: {
@@ -348,7 +361,7 @@ class _HomePageState extends State<HomePage> {
     results.add(await _apiService.submitHealthData(
       token,
       type: HealthType.temperature,
-      value: _healthData[HealthType.temperature] ?? 36.6,
+      value: temp,
       unit: HealthType.temperature.unit,
       timestamp: now,
       additionalData: { 'source': 'HomePageSave' },

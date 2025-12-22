@@ -66,7 +66,7 @@ export async function history(userId, { type, startDate, endDate }) {
   if (type) { where.push(`type = $${i++}`); params.push(type); }
   if (startDate) { where.push(`timestamp >= $${i++}`); params.push(startDate); }
   if (endDate) { where.push(`timestamp <= $${i++}`); params.push(endDate); }
-  const sql = `SELECT id, user_id AS "userId", type, value, unit, timestamp FROM health_data WHERE ${where.join(' AND ')} ORDER BY timestamp DESC`;
+  const sql = `SELECT id, user_id AS "userId", type, value, unit, timestamp, additional_data AS "additionalData" FROM health_data WHERE ${where.join(' AND ')} ORDER BY timestamp DESC`;
   const { rows } = await pool.query(sql, params);
   return { data: rows };
 }

@@ -4,7 +4,6 @@ import '../theme/app_theme.dart';
 import '../models/health_data_model.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
-import '../services/health_import_service.dart';
 
 class AnalysisPage extends StatefulWidget {
   const AnalysisPage({super.key});
@@ -16,7 +15,6 @@ class AnalysisPage extends StatefulWidget {
 class _AnalysisPageState extends State<AnalysisPage> {
   final ApiService _apiService = ApiService();
   final AuthService _authService = AuthService();
-  final HealthImportService _healthImport = HealthImportService();
 
   HealthType _selectedType = HealthType.heartRate;
   List<HealthData> _healthHistory = [];
@@ -417,31 +415,6 @@ class _AnalysisPageState extends State<AnalysisPage> {
                                 Text('Recent Records', style: Theme.of(context).textTheme.displaySmall),
                                 Row(
                                   children: [
-                                    ElevatedButton.icon(
-                                      onPressed: () async {
-                                        final token = await _authService.getToken();
-                                        if (token == null) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            const SnackBar(content: Text('Please login to import')),
-                                          );
-                                          return;
-                                        }
-                                        setState(() => _isLoading = true);
-                                        final count = await _healthImport.importAndSubmitSelectedType(
-                                          type: _selectedType,
-                                          token: token,
-                                          daysBack: 30,
-                                        );
-                                        await _loadHealthHistory();
-                                        setState(() => _isLoading = false);
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text('Imported and saved $count records')),
-                                        );
-                                      },
-                                      icon: const Icon(Icons.download_outlined),
-                                      label: const Text('Import from Health'),
-                                    ),
-                                    const SizedBox(width: 12),
                                     ElevatedButton.icon(
                                       onPressed: _showSummaryDialog,
                                       icon: const Icon(Icons.analytics_outlined),

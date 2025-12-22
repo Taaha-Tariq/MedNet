@@ -17,6 +17,7 @@ class _HomePageState extends State<HomePage> {
 
   Map<HealthType, double?> _healthData = {};
   bool _isLoading = false;
+  double? _bpDiastolic; // store diastolic for blood pressure
 
   @override
   void initState() {
@@ -40,6 +41,7 @@ class _HomePageState extends State<HomePage> {
               HealthType.bloodPressure: 120.0, // Systolic
               HealthType.temperature: 36.5,
             };
+            _bpDiastolic = 80.0; // mock diastolic
           });
         }
       }
@@ -155,10 +157,19 @@ class _HomePageState extends State<HomePage> {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        value > 0
-                            ? value.toStringAsFixed(
-                                type == HealthType.temperature ? 1 : 0)
-                            : '--',
+                        () {
+                          if (type == HealthType.bloodPressure) {
+                            final sys = value > 0 ? value.toStringAsFixed(0) : '--';
+                            final dia = _bpDiastolic != null && _bpDiastolic! > 0
+                                ? _bpDiastolic!.toStringAsFixed(0)
+                                : '--';
+                            return '$sys/$dia';
+                          }
+                          return value > 0
+                              ? value.toStringAsFixed(
+                                  type == HealthType.temperature ? 1 : 0)
+                              : '--';
+                        }(),
                         style: Theme.of(context).textTheme.displayLarge?.copyWith(
                               color: AppTheme.calmBlue,
                               fontWeight: FontWeight.bold,
@@ -328,7 +339,10 @@ class _HomePageState extends State<HomePage> {
       value: _healthData[HealthType.bloodPressure] ?? 120.0,
       unit: HealthType.bloodPressure.unit,
       timestamp: now,
-      additionalData: { 'source': 'HomePageSave' },
+      additionalData: {
+        if (_bpDiastolic != null) 'diastolic': _bpDiastolic,
+        'source': 'HomePageSave'
+      },
     ));
 
     results.add(await _apiService.submitHealthData(
@@ -359,14 +373,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _showManualEntryDialog(HealthType type) async {
     final token = await _authService.getToken();
-    if (token == null || token.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please login first')),
-        );
-      }
-      return;
-    }
+    // Token not required for local-only edits; will be used on Save FAB
 
     final valueController = TextEditingController();
     final diastolicController = TextEditingController(); // for BP optional
@@ -416,39 +423,22 @@ class _HomePageState extends State<HomePage> {
                   return;
                 }
 
-                Map<String, dynamic>? additional;
-                if (type == HealthType.bloodPressure) {
-                  final dTxt = diastolicController.text.trim();
-                  final dia = double.tryParse(dTxt);
-                  if (dia != null) {
-                    additional = {'diastolic': dia};
+                // Update local state only; backend save happens via FAB
+                setState(() => errorText = null);
+                Navigator.pop(context);
+                this.setState(() {
+                  _healthData[type] = val;
+                  if (type == HealthType.bloodPressure) {
+                    final dTxt = diastolicController.text.trim();
+                    final dia = double.tryParse(dTxt);
+                    _bpDiastolic = dia;
                   }
-                }
-
-                final res = await _apiService.submitHealthData(
-                  token,
-                  type: type,
-                  value: val,
-                  unit: type.unit,
-                  timestamp: DateTime.now(),
-                  additionalData: additional,
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('${type.displayName} updated locally')),
                 );
-
-                if (res['success'] == true && mounted) {
-                  setState(() => errorText = null);
-                  Navigator.pop(context);
-                  // update local display
-                  this.setState(() {
-                    _healthData[type] = val;
-                  });
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('${type.displayName} saved')),
-                  );
-                } else {
-                  setState(() => errorText = (res['message'] ?? 'Failed to save'));
-                }
               },
-              child: const Text('Save'),
+              child: const Text('Apply'),
             ),
           ],
         ),

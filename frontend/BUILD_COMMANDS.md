@@ -118,7 +118,6 @@ flutter doctor -v                 # Detailed setup info
 flutter pub get                   # Install packages
 flutter pub upgrade               # Update packages
 flutter clean                     # Clean build cache
-flutter pub add health            # Add Health Connect/HealthKit integration
 ```
 
 ### Run App
@@ -190,21 +189,8 @@ flutter clean
 flutter pub get
 ```
 
-## Health Connect / HealthKit Setup
-
-### Android (Health Connect)
-- Ensure the Health Connect app is installed on the device.
-- Grant permissions when prompted in-app for Heart Rate, Blood Pressure, and Body Temperature.
-- No AndroidManifest permissions are required; permissions are requested at runtime.
-
-### iOS (HealthKit)
-- On macOS, open `ios/Runner.xcworkspace` in Xcode and enable HealthKit capability.
-- Add Health usage description to Info.plist if prompted by the `health` package.
-- The app will request read permissions at runtime for the selected data types.
-
-### Import Flow
-- In the Analysis page, use the "Import from Health" button to request permissions and fetch records for the selected type.
-- Imported records are submitted to the backend (`/health/submit`) and appear in history.
+## Notes
+- Manual entry on the Home page updates values locally. Use the Save button to submit to the backend.
 
 ## Build Sizes
 

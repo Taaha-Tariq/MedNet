@@ -7,22 +7,8 @@ import '../models/health_data_model.dart';
 class ApiService {
   // Dynamically select base URL based on platform for local development.
   static String get baseUrl {
-    if (kIsWeb) {
-      // Chrome debug runs in the browser; call the local Node backend
-      return 'http://localhost:4000/api';
-    }
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.android:
-        // Android emulator special loopback
-        return 'http://10.0.2.2:4000/api';
-      case TargetPlatform.iOS:
-      case TargetPlatform.macOS:
-      case TargetPlatform.windows:
-      case TargetPlatform.linux:
-        return 'http://localhost:4000/api';
-      case TargetPlatform.fuchsia:
-        return 'http://localhost:4000/api';
-    }
+    // Hosted backend (Render)
+    return 'https://mednet-lwki.onrender.com/api';
   }
 
   // Headers

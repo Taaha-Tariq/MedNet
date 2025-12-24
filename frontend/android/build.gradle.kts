@@ -4,7 +4,8 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 buildscript {
-    extra["kotlin_version"] = "1.9.22"
+    // Align with settings.gradle.kts plugin version to avoid mismatches
+    extra["kotlin_version"] = "2.2.20"
 
     repositories {
         google()
@@ -12,7 +13,7 @@ buildscript {
     }
 
     dependencies {
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.2.20")
     }
 }
 
